@@ -3,7 +3,7 @@ Here is a list of locations for access points on the 5th floor:
 
 502
 
-505 x2
+505 x2//
 
 506
 
@@ -35,7 +35,7 @@ Here is a list of locations for access points on the 5th floor:
 
 5z01
 
-Stairs x2
+Stairs x2 //
 
 
 
