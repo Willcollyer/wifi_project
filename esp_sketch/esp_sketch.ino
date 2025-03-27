@@ -31,6 +31,9 @@ const AccessPoint knownAPs[] = {
   {"cc88c7d3f740", 0.0475, 0.84}
 };
 
+// Parameters for RSSI to distance calculation
+const int RSSI_REFERENCE = -45;  // RSSI at reference distance (1 meter)
+const float PATH_LOSS_EXPONENT = 2.0;  // Path loss exponent (typically between 2 and 4)
 
 ESP8266WebServer server(80);
 
@@ -186,8 +189,12 @@ void handleLocation() {
     // Find matching AP in knownAPs
     for (const auto& ap : knownAPs) {
       if (mac == ap.mac) {
-        float weight = pow(rssi + 100, 2);
-        if (weight > 0) {
+        // Calculate distance based on RSSI
+        float distance = calculateDistance(rssi);
+        
+        if (distance > 0) {
+          // Use inverse of distance as weight
+          float weight = 1 / distance;  // Inverse of distance as weight
           weightedX += ap.x * weight;
           weightedY += ap.y * weight;
           totalWeight += weight;
@@ -209,6 +216,11 @@ void handleLocation() {
   server.send(200, "application/json", jsonResponse);
   
   WiFi.scanDelete();
+}
+
+float calculateDistance(int rssi) {
+  // Use log-distance path loss model to calculate distance
+  return pow(10, (RSSI_REFERENCE - rssi) / (10 * PATH_LOSS_EXPONENT));
 }
 
 void handleUpload() {

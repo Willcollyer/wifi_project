@@ -6,11 +6,14 @@ from PIL import Image, ImageTk
 from pywifi import PyWiFi, const, Profile
 import numpy as np
 from collections import defaultdict
+import math  # For distance calculation
 
 class WiFiLocalization:
-    def __init__(self, floorplan_image_path, ap_data_path="ap_locations.json"):
+    def __init__(self, floorplan_image_path, ap_data_path="ap_locations.json", reference_distance=1, path_loss_exponent=3):
         self.ap_data = self.load_ap_data(ap_data_path)
         self.image_path = floorplan_image_path
+        self.reference_distance = reference_distance  # Reference distance in meters (e.g., 1 meter)
+        self.path_loss_exponent = path_loss_exponent  # Path loss exponent for the environment
         
         self.root = Tk()
         self.root.title("WiFi Localization")
@@ -116,6 +119,19 @@ class WiFiLocalization:
             })
         return averaged_data
 
+    def rssi_to_distance(self, rssi):
+        """
+        Convert RSSI to distance using the path loss model.
+        :param rssi: RSSI value (in dBm)
+        :return: distance in meters
+        """
+        rssi_0 = -50  # Reference RSSI at 1 meter distance
+        # Using the path loss model to calculate distance
+        if rssi == 0:  # Avoid division by zero
+            return float('inf')
+        distance = self.reference_distance * 10 ** ((rssi_0 - rssi) / (10 * self.path_loss_exponent))
+        return distance
+
     def estimate_location(self, scan_data):
         self.canvas.delete("ap_marker")
         self.canvas.delete("ap_label")
@@ -135,77 +151,43 @@ class WiFiLocalization:
                 known_mac = known_ap["id"].lower().replace(":", "")
                 if ap["mac"] == known_mac:
                     current_rssi = ap["rssi"]
-                    weight = current_rssi + 100
-                    if weight <= 0:
-                        continue
                     
+                    # Convert RSSI to distance
+                    distance = self.rssi_to_distance(current_rssi)
+                    if distance == float('inf'):
+                        continue  # Skip if the distance is invalid
+
                     ap_x = known_ap["x"] * self.image.width
                     ap_y = known_ap["y"] * self.image.height
                     
-                    if current_rssi > max_rssi:
-                        max_rssi = current_rssi
-                        strongest_ap_pos = (ap_x, ap_y)
-                        strongest_ap_mac = known_ap["id"]
-
                     ap_positions.append((ap_x, ap_y))
                     mac_labels.append(known_ap["id"])
-                    weights.append(weight ** 2)
+                    weights.append(1 / (distance ** 2))  # Inverse of the squared distance
+
                     break
 
         if not ap_positions:
             return None
 
-        # Calculate dynamic sizing parameters
-        max_squared_weight = max(weights) if weights else 1
-        base_radius = 5
-        max_radius = 20
+        total_weight = sum(weights)
+        weighted_x = sum(x * w for (x, y), w in zip(ap_positions, weights)) / total_weight
+        weighted_y = sum(y * w for (x, y), w in zip(ap_positions, weights)) / total_weight
 
-        # Draw AP markers with size based on influence
-        for (x, y), mac, weight_sq in zip(ap_positions, mac_labels, weights):
-            # Calculate radius based on relative influence
-            radius = base_radius + (weight_sq / max_squared_weight) * (max_radius - base_radius)
-            
-            # Draw scaled AP marker
+        # Optionally, draw AP markers based on the new weights (size of markers may also change)
+        for (x, y), mac, weight in zip(ap_positions, mac_labels, weights):
             self.canvas.create_oval(
-                x - radius, y - radius, x + radius, y + radius,
-                fill="#ffdd00", outline="black",
+                x - 5, y - 5, x + 5, y + 5,
+                fill="#ffdd00", outline="black", width=2,
                 tags=("ap_marker",)
             )
-            # Position label below the scaled marker
             self.canvas.create_text(
-                x, y + radius + 5,
+                x, y + 5,
                 text=mac,
                 fill="black",
                 anchor="n",
                 font=("Arial", 8),
                 tags=("ap_label",)
             )
-            
-            
-
-        # Draw strongest AP arrow
-        if strongest_ap_pos:
-            x, y = strongest_ap_pos
-            start_x = x + 10
-            start_y = y
-            end_x = x + 25
-            end_y = y
-            self.canvas.create_line(
-                start_x, start_y, end_x, end_y,
-                arrow="last", fill="red", width=2,
-                tags=("arrow",)
-            )
-            self.canvas.create_text(
-                end_x + 5, end_y,
-                text="Starting Point",
-                anchor="w", fill="red",
-                font=("Arial", 8),
-                tags=("arrow",)
-            )
-
-        total_weight = sum(weights)
-        weighted_x = sum(x * w for (x, y), w in zip(ap_positions, weights)) / total_weight
-        weighted_y = sum(y * w for (x, y), w in zip(ap_positions, weights)) / total_weight
 
         return weighted_x, weighted_y
 
