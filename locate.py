@@ -9,7 +9,7 @@ from collections import defaultdict
 import math  # For distance calculation
 
 class WiFiLocalization:
-    def __init__(self, floorplan_image_path, ap_data_path="ap_locations.json", reference_distance=1, path_loss_exponent=3):
+    def __init__(self, floorplan_image_path, ap_data_path="ap_locations.json", reference_distance=1, path_loss_exponent=4):
         self.ap_data = self.load_ap_data(ap_data_path)
         self.image_path = floorplan_image_path
         self.reference_distance = reference_distance  # Reference distance in meters (e.g., 1 meter)
@@ -125,7 +125,7 @@ class WiFiLocalization:
         :param rssi: RSSI value (in dBm)
         :return: distance in meters
         """
-        rssi_0 = -50  # Reference RSSI at 1 meter distance
+        rssi_0 = -46  # Reference RSSI at 1 meter distance
         # Using the path loss model to calculate distance
         if rssi == 0:  # Avoid division by zero
             return float('inf')
@@ -211,7 +211,7 @@ class WiFiLocalization:
             else:
                 print("No matching APs found in scan data.")
         
-        self.root.after(8000, self.update_scan)  # Longer interval to accommodate multiple scans
+        self.root.after(3000, self.update_scan)  # Longer interval to accommodate multiple scans
 
     def run(self):
         self.root.after(100, self.update_scan)
